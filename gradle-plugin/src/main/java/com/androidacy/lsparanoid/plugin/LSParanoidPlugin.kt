@@ -64,19 +64,21 @@ class LSParanoidPlugin : Plugin<Project> {
                 task.configure { taskObj ->
                     // Use Android's task providers instead of filtering by name
                     val javaCompileTask = variant.sources.java?.let {
-                        project.tasks.named("compile${variant.name.capitalize()}JavaWithJavac")
+                        project.tasks.named("compile${variant.name.replaceFirstChar { c -> c.uppercase() }}JavaWithJavac")
                     }
                     if (javaCompileTask != null) {
                         taskObj.dependsOn(javaCompileTask)
                     }
 
-                    // For Kotlin, we can use a similar approach if available
-                    project.tasks.matching { it is KotlinCompilationTask<*> &&
-                            it.name.contains(variant.name, ignoreCase = true)
-                    }.forEach {
-                        taskObj.dependsOn(it)
-                        taskObj.mustRunAfter(it)
-                    }
+                    // For Kotlin, depend only on the main source compilation task (not test tasks)
+                    // The task name follows pattern: compile<VariantName>Kotlin
+                    val variantCapitalized = variant.name.replaceFirstChar { c -> c.uppercase() }
+                    val kotlinTaskName = "compile${variantCapitalized}Kotlin"
+                    project.tasks.matching { it is KotlinCompilationTask<*> && it.name == kotlinTaskName }
+                        .forEach {
+                            taskObj.dependsOn(it)
+                            taskObj.mustRunAfter(it)
+                        }
                 }
             }
         }
