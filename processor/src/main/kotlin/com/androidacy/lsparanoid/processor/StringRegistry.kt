@@ -17,125 +17,110 @@
 
 package com.androidacy.lsparanoid.processor
 
-import com.androidacy.lsparanoid.DeobfuscatorHelper
-import com.androidacy.lsparanoid.RandomHelper
-import java.io.File
+import com.androidacy.lsparanoid.HexHelper
+import com.androidacy.lsparanoid.ObfuscationMode
+import com.androidacy.lsparanoid.StringProcessor
 import java.io.Closeable
-import java.io.DataOutputStream
-import java.io.FileOutputStream
-import java.io.DataInputStream
-import java.io.FileInputStream
 
-interface StringRegistry : Closeable {
-  fun registerString(string: String): Long
+/**
+ * 字符串注册条目。
+ */
+sealed class StringEntry {
+    abstract val encryptedData: ByteArray
 
-  @Deprecated("Use streamChunks for better memory efficiency", ReplaceWith("streamChunks(consumer)"))
-  fun getAllChunks(): List<String>
+    /** 在 DEX 字节码中使用的数据：BYTES 模式为 ByteArray, 其余模式为 String */
+    abstract val codeData: Any
 
-  fun streamChunks(consumer: (String) -> Unit)
-  fun getChunkCount(): Int
-  fun getTotalLength(): Long
-  fun copyDataTo(output: java.io.OutputStream)
-  fun getDataAsByteArray(): ByteArray
+    /** 用于判断是否内联的大小 */
+    abstract val codeSize: Int
+
+    data class Inline(
+        override val encryptedData: ByteArray,
+        override val codeData: Any,
+        override val codeSize: Int
+    ) : StringEntry() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Inline) return false
+            return encryptedData.contentEquals(other.encryptedData)
+        }
+        override fun hashCode(): Int = encryptedData.contentHashCode()
+    }
+
+    data class Centralized(
+        override val encryptedData: ByteArray,
+        override val codeData: Any,
+        override val codeSize: Int,
+        val index: Int
+    ) : StringEntry() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Centralized) return false
+            return index == other.index && encryptedData.contentEquals(other.encryptedData)
+        }
+        override fun hashCode(): Int = 31 * index + encryptedData.contentHashCode()
+    }
 }
 
-class StringRegistryImpl(
-  seed: Int
+interface StringRegistry : Closeable {
+    fun registerString(string: String): StringEntry
+    fun getCentralizedCount(): Int
+    fun getCentralizedEntries(): List<StringEntry.Centralized>
+}
+
+/**
+ * 默认实现。根据 mode 决定如何编码加密数据 + 选择存储策略。
+ */
+class StringRegistryImpl @JvmOverloads constructor(
+    private val stringProcessor: StringProcessor,
+    private val key: ByteArray?,
+    private val mode: ObfuscationMode = ObfuscationMode.BYTES,
+    private val inlineThreshold: Int = DEFAULT_INLINE_THRESHOLD
 ) : StringRegistry {
 
-  private val seed = seed.toLong() and 0xffff_ffffL
-  private val tempFile = File.createTempFile("lsparanoid-", ".tmp").apply {
-    deleteOnExit()
-  }
-  private var length = 0L
-  private val writer = DataOutputStream(FileOutputStream(tempFile))
-  private val stringToIdMap = mutableMapOf<String, Long>()
+    private val stringToEntryMap = mutableMapOf<String, StringEntry>()
+    private val centralizedEntries = mutableListOf<StringEntry.Centralized>()
+    private var nextCentralizedIndex = 0
 
-  override fun registerString(string: String): Long {
-    // Return existing ID if string was already registered (deduplication)
-    stringToIdMap[string]?.let { return it }
+    override fun registerString(string: String): StringEntry {
+        stringToEntryMap[string]?.let { return it }
 
-    if (string.length > 0xFFFF) {
-      throw IllegalArgumentException("String length ${string.length} exceeds maximum of 65535 characters")
-    }
-    var mask = 0L
-    var state = RandomHelper.seed(seed)
-    state = RandomHelper.next(state)
-    mask = mask or (state and 0xffff_0000_0000L)
-    state = RandomHelper.next(state)
-    mask = mask or ((state and 0xffff_0000_0000L) shl 16)
-    val index = length
-    val id = seed or ((index shl 32) xor mask)
+        val encrypted = stringProcessor.encrypt(string, key)
 
-    state = RandomHelper.next(state)
-    writer.writeChar((((state ushr 32) and 0xffffL) xor string.length.toLong()).toInt())
-
-    for (char in string) {
-      state = RandomHelper.next(state)
-      writer.writeChar((((state ushr 32) and 0xffffL) xor char.code.toLong()).toInt())
-    }
-    length += string.length + 1
-
-    // Cache the ID for deduplication
-    stringToIdMap[string] = id
-
-    return id
-  }
-
-  @Deprecated("Use streamChunks for better memory efficiency", ReplaceWith("streamChunks(consumer)"))
-  override fun getAllChunks(): List<String> {
-    // This implementation remains for compatibility but should not be used for large datasets.
-    val chunks = mutableListOf<String>()
-    streamChunks { chunks.add(it) }
-    return chunks
-  }
-
-  override fun streamChunks(consumer: (String) -> Unit) {
-    writer.flush()
-    if (length == 0L) {
-      return
-    }
-    DataInputStream(FileInputStream(tempFile)).use { reader ->
-      val buffer = CharArray(DeobfuscatorHelper.MAX_CHUNK_LENGTH)
-      var charsRead = 0
-      while (charsRead < length) {
-        val toRead = minOf(DeobfuscatorHelper.MAX_CHUNK_LENGTH.toLong(), length - charsRead).toInt()
-        for (i in 0 until toRead) {
-          buffer[i] = reader.readChar()
+        // 根据 mode 决定 codeData 和 codeSize
+        val (codeData, codeSize) = when (mode) {
+            ObfuscationMode.BYTES -> encrypted to encrypted.size
+            ObfuscationMode.BASE64 -> {
+                val b64 = java.util.Base64.getEncoder().encodeToString(encrypted)
+                b64 to b64.length
+            }
+            ObfuscationMode.HEX -> {
+                val hex = HexHelper.encode(encrypted)
+                hex to hex.length
+            }
+            ObfuscationMode.CUSTOM -> {
+                val custom = stringProcessor.formatData(encrypted)
+                custom to custom.length
+            }
         }
-        consumer(String(buffer, 0, toRead))
-        charsRead += toRead
-      }
+
+        val entry = if (codeSize <= inlineThreshold) {
+            StringEntry.Inline(encrypted, codeData, codeSize)
+        } else {
+            StringEntry.Centralized(encrypted, codeData, codeSize, nextCentralizedIndex++)
+                .also { centralizedEntries.add(it) }
+        }
+
+        stringToEntryMap[string] = entry
+        return entry
     }
-  }
 
-  override fun getChunkCount(): Int {
-    writer.flush()
-    if (length == 0L) {
-      return 0
+    override fun getCentralizedCount() = centralizedEntries.size
+    override fun getCentralizedEntries() = centralizedEntries.toList()
+
+    override fun close() {}
+
+    companion object {
+        const val DEFAULT_INLINE_THRESHOLD = 64
     }
-    return ((length + DeobfuscatorHelper.MAX_CHUNK_LENGTH - 1) / DeobfuscatorHelper.MAX_CHUNK_LENGTH).toInt()
-  }
-
-  override fun getTotalLength(): Long {
-    writer.flush()
-    return length
-  }
-
-  override fun copyDataTo(output: java.io.OutputStream) {
-    writer.flush()
-    tempFile.inputStream().use { input ->
-      input.copyTo(output)
-    }
-  }
-
-  override fun getDataAsByteArray(): ByteArray {
-    writer.flush()
-    return tempFile.readBytes()
-  }
-
-  override fun close() {
-    writer.close()
-    tempFile.delete()
-  }
 }

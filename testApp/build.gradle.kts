@@ -1,11 +1,25 @@
 plugins {
     id("com.android.application") version "9.0.0"
-    id("com.androidacy.lsparanoid") version "0.10.3"
+    id("com.androidacy.lsparanoid") version "0.11.0"
 }
 
 lsparanoid {
+    classFilter = { it.startsWith("com.androidacy.lsparanoid.testapp") }
     // Enable obfuscation for both debug and release to allow testing
-    variantFilter = { _ -> true }
+    variantFilter = { variant ->
+        true
+    }
+
+    // 自定义加解密处理器配置
+    // 使用示例处理器（XOR 加密）。注释掉以下行则使用默认处理器。
+    processor = "com.androidacy.lsparanoid.testapp.ExampleStringProcessor"
+
+    // 加密密钥（写入 DEX 时会混淆处理，不以明文出现）
+    // 如果不设置，则由处理器自行管理密钥
+    key = "test-secret-key-2024"
+
+    // 加密数据在 DEX 中的显示格式: "base64"(默认), "hex", "bytes"
+    mode = "custom"     // 使用 ExampleStringProcessor 自定义的 formatData/parseData（喵呜格式）
 }
 
 android {
@@ -35,6 +49,13 @@ android {
             )
         }
     }
+    // 声明原生编译位置，准确到CMakeLists的位置
+    externalNativeBuild {
+        cmake {
+            path("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -55,7 +76,7 @@ android {
 }
 
 dependencies {
-    implementation("com.androidacy.lsparanoid:core:0.10.3")
+    implementation("com.androidacy.lsparanoid:core:0.11.0")
 
     // Kotlin stdlib needed for annotations used by lsparanoid
     compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")

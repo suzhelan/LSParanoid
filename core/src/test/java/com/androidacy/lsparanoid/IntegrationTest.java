@@ -1,332 +1,271 @@
 package com.androidacy.lsparanoid;
 
+import com.androidacy.lsparanoid.processor.StringEntry;
 import com.androidacy.lsparanoid.processor.StringRegistryImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.io.ByteArrayOutputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Integration tests for the full encode/decode pipeline.
- * Tests the round-trip: StringRegistry (encode) -> DeobfuscatorHelper (decode).
+ * 新架构集成测试。
+ * 测试 DefaultStringProcessor 加解密 + StringRegistry 注册 + HexHelper 编解码。
  */
 class IntegrationTest {
 
+    // ==================== DefaultStringProcessor 加解密测试 ====================
+
     @Test
-    @DisplayName("Round-trip: simple ASCII string")
-    void roundTripSimpleAsciiString() {
-        int seed = 12345;
+    @DisplayName("DefaultStringProcessor: 简单 ASCII 字符串加解密往返")
+    void defaultProcessorSimpleAsciiRoundTrip() {
+        StringProcessor processor = new DefaultStringProcessor(12345L);
         String original = "Hello, World!";
 
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            long id = registry.registerString(original);
+        byte[] encrypted = processor.encrypt(original, null);
+        String decrypted = processor.decrypt(encrypted, null);
 
-            byte[] data = registry.getDataAsByteArray();
-            long totalLength = registry.getTotalLength();
-            String[] chunks = DeobfuscatorHelper.loadChunksFromByteArray(data, totalLength);
-
-            String decoded = DeobfuscatorHelper.getString(id, chunks);
-            assertEquals(original, decoded, "Round-trip should preserve string");
-        }
+        assertEquals(original, decrypted, "加解密往返应保持字符串不变");
     }
 
     @Test
-    @DisplayName("Round-trip: empty string")
-    void roundTripEmptyString() {
-        int seed = 12345;
+    @DisplayName("DefaultStringProcessor: 空字符串加解密")
+    void defaultProcessorEmptyString() {
+        StringProcessor processor = new DefaultStringProcessor(12345L);
         String original = "";
 
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            long id = registry.registerString(original);
-
-            byte[] data = registry.getDataAsByteArray();
-            long totalLength = registry.getTotalLength();
-            String[] chunks = DeobfuscatorHelper.loadChunksFromByteArray(data, totalLength);
-
-            String decoded = DeobfuscatorHelper.getString(id, chunks);
-            assertEquals(original, decoded, "Round-trip should handle empty string");
-        }
+        byte[] encrypted = processor.encrypt(original, null);
+        assertNotNull(encrypted, "空字符串加密结果不应为 null");
+        String decrypted = processor.decrypt(encrypted, null);
+        assertEquals(original, decrypted, "空字符串加解密应正确");
     }
 
     @Test
-    @DisplayName("Round-trip: Unicode and emoji")
-    void roundTripUnicodeAndEmoji() {
-        int seed = 54321;
+    @DisplayName("DefaultStringProcessor: Unicode 和 Emoji 加解密")
+    void defaultProcessorUnicodeAndEmoji() {
+        StringProcessor processor = new DefaultStringProcessor(54321L);
         String original = "Hello 世界 🌍 Привет 🎉";
 
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            long id = registry.registerString(original);
+        byte[] encrypted = processor.encrypt(original, null);
+        String decrypted = processor.decrypt(encrypted, null);
 
-            byte[] data = registry.getDataAsByteArray();
-            long totalLength = registry.getTotalLength();
-            String[] chunks = DeobfuscatorHelper.loadChunksFromByteArray(data, totalLength);
-
-            String decoded = DeobfuscatorHelper.getString(id, chunks);
-            assertEquals(original, decoded, "Round-trip should preserve Unicode/emoji");
-        }
+        assertEquals(original, decrypted, "加解密应保留 Unicode/Emoji");
     }
 
     @Test
-    @DisplayName("Round-trip: special characters")
-    void roundTripSpecialCharacters() {
-        int seed = 99999;
+    @DisplayName("DefaultStringProcessor: 特殊字符加解密")
+    void defaultProcessorSpecialCharacters() {
+        StringProcessor processor = new DefaultStringProcessor(99999L);
         String original = "!@#$%^&*()_+-=[]{}|;':\",./<>?`~\n\r\t";
 
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            long id = registry.registerString(original);
+        byte[] encrypted = processor.encrypt(original, null);
+        String decrypted = processor.decrypt(encrypted, null);
 
-            byte[] data = registry.getDataAsByteArray();
-            long totalLength = registry.getTotalLength();
-            String[] chunks = DeobfuscatorHelper.loadChunksFromByteArray(data, totalLength);
+        assertEquals(original, decrypted, "加解密应保留特殊字符");
+    }
 
-            String decoded = DeobfuscatorHelper.getString(id, chunks);
-            assertEquals(original, decoded, "Round-trip should preserve special characters");
+    @Test
+    @DisplayName("DefaultStringProcessor: 多个字符串使用相同种子确定性加密")
+    void defaultProcessorDeterministic() {
+        String original = "Test string for determinism";
+
+        // 第一次加密
+        StringProcessor proc1 = new DefaultStringProcessor(42L);
+        byte[] encrypted1 = proc1.encrypt(original, null);
+
+        // 第二次加密（相同种子）
+        StringProcessor proc2 = new DefaultStringProcessor(42L);
+        byte[] encrypted2 = proc2.encrypt(original, null);
+
+        assertArrayEquals(encrypted1, encrypted2, "相同种子应产生相同加密结果");
+    }
+
+    @Test
+    @DisplayName("DefaultStringProcessor: 不同种子产生不同输出")
+    void defaultProcessorDifferentSeeds() {
+        String original = "Test string";
+
+        StringProcessor proc1 = new DefaultStringProcessor(111L);
+        byte[] encrypted1 = proc1.encrypt(original, null);
+
+        StringProcessor proc2 = new DefaultStringProcessor(222L);
+        byte[] encrypted2 = proc2.encrypt(original, null);
+
+        assertFalse(Arrays.equals(encrypted1, encrypted2),
+            "不同种子应产生不同的加密结果");
+    }
+
+    @Test
+    @DisplayName("DefaultStringProcessor: 使用自定义密钥加解密")
+    void defaultProcessorWithCustomKey() {
+        StringProcessor processor = new DefaultStringProcessor(12345L);
+        String original = "Secret message with key";
+        byte[] key = "my-secret-key-123".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        byte[] encrypted = processor.encrypt(original, key);
+        String decrypted = processor.decrypt(encrypted, key);
+
+        assertEquals(original, decrypted, "使用自定义密钥加解密应正确");
+    }
+
+    @Test
+    @DisplayName("DefaultStringProcessor: shouldFog 过滤空字符串")
+    void defaultProcessorShouldFog() {
+        StringProcessor processor = new DefaultStringProcessor(0L);
+
+        assertFalse(processor.shouldFog(""), "空字符串不应混淆");
+        assertTrue(processor.shouldFog("hello"), "非空字符串应混淆");
+        assertTrue(processor.shouldFog("a"), "单字符应混淆");
+    }
+
+    // ==================== StringRegistry 注册测试 ====================
+
+    @Test
+    @DisplayName("StringRegistry: 短字符串应为内联存储")
+    void stringRegistryShortStringIsInline() {
+        StringProcessor processor = new DefaultStringProcessor(12345L);
+        try (StringRegistryImpl registry = new StringRegistryImpl(processor, null)) {
+            StringEntry entry = registry.registerString("Hello");
+
+            assertInstanceOf(StringEntry.Inline.class, entry,
+                "短字符串应使用内联存储");
+            assertTrue(entry.getEncryptedData().length > 0, "加密数据不应为空");
         }
     }
 
     @Test
-    @DisplayName("Round-trip: multiple strings")
-    void roundTripMultipleStrings() {
-        int seed = 11111;
-        String[] originals = {
-            "First string",
-            "Second string",
-            "Third string",
-            "Fourth string"
-        };
+    @DisplayName("StringRegistry: 字符串去重")
+    void stringRegistryDeduplication() {
+        StringProcessor processor = new DefaultStringProcessor(12345L);
+        try (StringRegistryImpl registry = new StringRegistryImpl(processor, null)) {
+            StringEntry entry1 = registry.registerString("Hello");
+            StringEntry entry2 = registry.registerString("Hello");
 
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            long[] ids = new long[originals.length];
-            for (int i = 0; i < originals.length; i++) {
-                ids[i] = registry.registerString(originals[i]);
-            }
-
-            byte[] data = registry.getDataAsByteArray();
-            long totalLength = registry.getTotalLength();
-            String[] chunks = DeobfuscatorHelper.loadChunksFromByteArray(data, totalLength);
-
-            for (int i = 0; i < originals.length; i++) {
-                String decoded = DeobfuscatorHelper.getString(ids[i], chunks);
-                assertEquals(originals[i], decoded,
-                    "Should decode string " + i + " correctly");
-            }
+            assertSame(entry1, entry2, "相同字符串应返回相同条目（去重）");
         }
     }
 
     @Test
-    @DisplayName("Round-trip: long string requiring single chunk")
-    void roundTripLongStringSingleChunk() {
-        int seed = 22222;
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 5000; i++) {
-            sb.append((char) ('A' + (i % 26)));
-        }
-        String original = sb.toString();
+    @DisplayName("StringRegistry: 不同字符串返回不同条目")
+    void stringRegistryDifferentStrings() {
+        StringProcessor processor = new DefaultStringProcessor(12345L);
+        try (StringRegistryImpl registry = new StringRegistryImpl(processor, null)) {
+            StringEntry entry1 = registry.registerString("Hello");
+            StringEntry entry2 = registry.registerString("World");
 
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            long id = registry.registerString(original);
-
-            byte[] data = registry.getDataAsByteArray();
-            long totalLength = registry.getTotalLength();
-            String[] chunks = DeobfuscatorHelper.loadChunksFromByteArray(data, totalLength);
-
-            assertEquals(1, chunks.length, "Should fit in single chunk");
-
-            String decoded = DeobfuscatorHelper.getString(id, chunks);
-            assertEquals(original, decoded, "Round-trip should preserve long string");
+            assertNotSame(entry1, entry2, "不同字符串应返回不同条目");
         }
     }
 
+    // ==================== HexHelper 编解码测试 ====================
+
     @Test
-    @DisplayName("Round-trip: string requiring multiple chunks")
-    void roundTripMultipleChunks() {
-        int seed = 33333;
-        StringBuilder sb = new StringBuilder();
-        // Create string larger than MAX_CHUNK_LENGTH
-        for (int i = 0; i < DeobfuscatorHelper.MAX_CHUNK_LENGTH + 1000; i++) {
-            sb.append((char) ('0' + (i % 10)));
-        }
-        String original = sb.toString();
+    @DisplayName("HexHelper: 编解码往返")
+    void hexHelperRoundTrip() {
+        byte[] original = {0x00, 0x01, 0x0F, 0x10, (byte) 0xFF, (byte) 0xAB, 0x7F};
 
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            long id = registry.registerString(original);
+        String hex = HexHelper.encode(original);
+        byte[] decoded = HexHelper.decode(hex);
 
-            byte[] data = registry.getDataAsByteArray();
-            long totalLength = registry.getTotalLength();
-            String[] chunks = DeobfuscatorHelper.loadChunksFromByteArray(data, totalLength);
-
-            assertTrue(chunks.length >= 2, "Should require multiple chunks");
-
-            String decoded = DeobfuscatorHelper.getString(id, chunks);
-            assertEquals(original, decoded,
-                "Round-trip should preserve string spanning multiple chunks");
-        }
+        assertArrayEquals(original, decoded, "Hex 编解码往返应保持数据不变");
     }
 
     @Test
-    @DisplayName("Round-trip: very long string (near max length)")
-    void roundTripVeryLongString() {
-        int seed = 44444;
-        // Create a string of 50,000 characters
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 50000; i++) {
-            sb.append((char) ('a' + (i % 26)));
-        }
-        String original = sb.toString();
+    @DisplayName("HexHelper: 空数组")
+    void hexHelperEmptyArray() {
+        byte[] original = new byte[0];
 
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            long id = registry.registerString(original);
+        String hex = HexHelper.encode(original);
+        assertEquals("", hex, "空数组应编码为空字符串");
 
-            byte[] data = registry.getDataAsByteArray();
-            long totalLength = registry.getTotalLength();
-            String[] chunks = DeobfuscatorHelper.loadChunksFromByteArray(data, totalLength);
+        byte[] decoded = HexHelper.decode(hex);
+        assertArrayEquals(original, decoded, "空字符串解码应为空数组");
+    }
 
-            int expectedChunks = (int) Math.ceil(50001.0 / DeobfuscatorHelper.MAX_CHUNK_LENGTH);
-            assertEquals(expectedChunks, chunks.length,
-                "Should split into expected number of chunks");
+    @Test
+    @DisplayName("HexHelper: 编码输出为小写")
+    void hexHelperLowercase() {
+        byte[] data = {(byte) 0xAB, (byte) 0xCD, (byte) 0xEF};
+        String hex = HexHelper.encode(data);
 
-            String decoded = DeobfuscatorHelper.getString(id, chunks);
-            assertEquals(original, decoded, "Round-trip should preserve very long string");
-        }
+        assertEquals("abcdef", hex, "Hex 编码应为小写");
+    }
+
+    // ==================== ObfuscationMode 测试 ====================
+
+    @Test
+    @DisplayName("ObfuscationMode: fromString 解析")
+    void obfuscationModeFromString() {
+        assertEquals(ObfuscationMode.BASE64, ObfuscationMode.fromString("base64"));
+        assertEquals(ObfuscationMode.BASE64, ObfuscationMode.fromString("BASE64"));
+        assertEquals(ObfuscationMode.BASE64, ObfuscationMode.fromString("Base64"));
+        assertEquals(ObfuscationMode.HEX, ObfuscationMode.fromString("hex"));
+        assertEquals(ObfuscationMode.BYTES, ObfuscationMode.fromString("bytes"));
+    }
+
+    @Test
+    @DisplayName("ObfuscationMode: 无效名称抛出异常")
+    void obfuscationModeInvalidName() {
+        assertThrows(IllegalArgumentException.class, () -> ObfuscationMode.fromString("invalid"));
+    }
+
+    // ==================== 端到端测试 ====================
+
+    @Test
+    @DisplayName("端到端: 加密 → Hex 编码 → 解码 → 解密")
+    void endToEndHexMode() {
+        StringProcessor processor = new DefaultStringProcessor(12345L);
+        String original = "End-to-end test with hex mode";
+
+        // 加密
+        byte[] encrypted = processor.encrypt(original, null);
+
+        // 编码为 hex
+        String hexString = HexHelper.encode(encrypted);
+
+        // 从 hex 解码
+        byte[] decoded = HexHelper.decode(hexString);
+
+        // 解密
+        String result = processor.decrypt(decoded, null);
+
+        assertEquals(original, result, "端到端 hex 模式加解密应正确");
+    }
+
+    @Test
+    @DisplayName("端到端: 加密 → Base64 编码 → 解码 → 解密")
+    void endToEndBase64Mode() {
+        StringProcessor processor = new DefaultStringProcessor(12345L);
+        String original = "End-to-end test with base64 mode 中文 🎉";
+
+        // 加密
+        byte[] encrypted = processor.encrypt(original, null);
+
+        // 编码为 base64
+        String base64String = java.util.Base64.getEncoder().encodeToString(encrypted);
+
+        // 从 base64 解码
+        byte[] decoded = java.util.Base64.getDecoder().decode(base64String);
+
+        // 解密
+        String result = processor.decrypt(decoded, null);
+
+        assertEquals(original, result, "端到端 base64 模式加解密应正确");
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {0, 1, 42, 12345, 99999, -1, -12345, Integer.MAX_VALUE, Integer.MIN_VALUE})
-    @DisplayName("Same seed produces deterministic output")
-    void sameSeedProducesDeterministicOutput(int seed) {
-        String original = "Test string for determinism";
+    @ValueSource(longs = {0, 1, 42, 12345, 99999, -1, -12345, Long.MAX_VALUE, Long.MIN_VALUE})
+    @DisplayName("多种种子值加解密往返")
+    void roundTripWithVariousSeeds(long seed) {
+        StringProcessor processor = new DefaultStringProcessor(seed);
+        String original = "Test with seed: " + seed;
 
-        // First encoding
-        long id1;
-        byte[] data1;
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            id1 = registry.registerString(original);
-            data1 = registry.getDataAsByteArray();
-        }
+        byte[] encrypted = processor.encrypt(original, null);
+        String decrypted = processor.decrypt(encrypted, null);
 
-        // Second encoding with same seed
-        long id2;
-        byte[] data2;
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            id2 = registry.registerString(original);
-            data2 = registry.getDataAsByteArray();
-        }
-
-        assertEquals(id1, id2, "Same seed should produce same ID");
-        assertArrayEquals(data1, data2, "Same seed should produce same encoded data");
-    }
-
-    @Test
-    @DisplayName("Different seeds produce different output")
-    void differentSeedsProduceDifferentOutput() {
-        String original = "Test string";
-
-        long id1;
-        byte[] data1;
-        try (StringRegistryImpl registry = new StringRegistryImpl(111)) {
-            id1 = registry.registerString(original);
-            data1 = registry.getDataAsByteArray();
-        }
-
-        long id2;
-        byte[] data2;
-        try (StringRegistryImpl registry = new StringRegistryImpl(222)) {
-            id2 = registry.registerString(original);
-            data2 = registry.getDataAsByteArray();
-        }
-
-        // IDs contain the seed, so they will differ
-        assertNotEquals(id1, id2, "Different seeds should produce different IDs");
-
-        // The encoded data should also differ
-        assertFalse(java.util.Arrays.equals(data1, data2),
-            "Different seeds should produce different encoded data");
-    }
-
-    @Test
-    @DisplayName("Round-trip: boundary at MAX_CHUNK_LENGTH")
-    void roundTripBoundaryAtMaxChunkLength() {
-        int seed = 55555;
-        // Create string exactly at chunk boundary
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < DeobfuscatorHelper.MAX_CHUNK_LENGTH; i++) {
-            sb.append('X');
-        }
-        String original = sb.toString();
-
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            long id = registry.registerString(original);
-
-            byte[] data = registry.getDataAsByteArray();
-            long totalLength = registry.getTotalLength();
-            String[] chunks = DeobfuscatorHelper.loadChunksFromByteArray(data, totalLength);
-
-            String decoded = DeobfuscatorHelper.getString(id, chunks);
-            assertEquals(original, decoded,
-                "Round-trip should handle string at chunk boundary");
-        }
-    }
-
-    @Test
-    @DisplayName("Round-trip: strings with all Unicode planes")
-    void roundTripAllUnicodePlanes() {
-        int seed = 66666;
-        // Test various Unicode planes
-        String original = "ASCII: abc, "
-                + "Latin: áéíóú, "
-                + "Cyrillic: абв, "
-                + "CJK: 中文日本, "
-                + "Arabic: العربية, "
-                + "Emoji: 😀🎉🌍, "
-                + "Math: ∑∫∞";
-
-        try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-            long id = registry.registerString(original);
-
-            byte[] data = registry.getDataAsByteArray();
-            long totalLength = registry.getTotalLength();
-            String[] chunks = DeobfuscatorHelper.loadChunksFromByteArray(data, totalLength);
-
-            String decoded = DeobfuscatorHelper.getString(id, chunks);
-            assertEquals(original, decoded,
-                "Round-trip should preserve all Unicode planes");
-        }
-    }
-
-    @Test
-    @DisplayName("Chunk count calculation is correct")
-    void chunkCountCalculationIsCorrect() {
-        int seed = 77777;
-        int[] testSizes = {
-            1,
-            100,
-            DeobfuscatorHelper.MAX_CHUNK_LENGTH - 1,
-            DeobfuscatorHelper.MAX_CHUNK_LENGTH,
-            DeobfuscatorHelper.MAX_CHUNK_LENGTH + 1,
-            DeobfuscatorHelper.MAX_CHUNK_LENGTH * 2,
-            DeobfuscatorHelper.MAX_CHUNK_LENGTH * 3 + 100
-        };
-
-        for (int size : testSizes) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < size; i++) {
-                sb.append('A');
-            }
-            String original = sb.toString();
-
-            try (StringRegistryImpl registry = new StringRegistryImpl(seed)) {
-                registry.registerString(original);
-
-                int expectedChunks = (int) Math.ceil((size + 1.0) / DeobfuscatorHelper.MAX_CHUNK_LENGTH);
-                assertEquals(expectedChunks, registry.getChunkCount(),
-                    "Chunk count should be correct for size " + size);
-            }
-        }
+        assertEquals(original, decrypted, "种子 " + seed + " 加解密应正确");
     }
 }

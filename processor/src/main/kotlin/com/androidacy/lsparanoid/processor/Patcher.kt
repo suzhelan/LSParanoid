@@ -22,16 +22,26 @@ import com.joom.grip.FileRegistry
 import com.joom.grip.io.FileSource
 import com.joom.grip.mirrors.Type
 import com.joom.grip.mirrors.getObjectTypeByInternalName
+import com.androidacy.lsparanoid.ObfuscationMode
 import com.androidacy.lsparanoid.processor.commons.createDirectory
 import com.androidacy.lsparanoid.processor.commons.createFile
 import com.androidacy.lsparanoid.processor.logging.getLogger
 import com.androidacy.lsparanoid.processor.model.Deobfuscator
+import com.androidacy.lsparanoid.StringProcessor
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
 import java.util.jar.JarOutputStream
 
+/**
+ * 类文件 Patcher。
+ *
+ * 协调各个子 Patcher 对类文件进行字符串混淆处理：
+ * 1. [RemoveObfuscateClassPatcher] - 移除 @Obfuscate 注解
+ * 2. [StringLiteralsClassPatcher] - 替换方法中的字符串字面量
+ * 3. [StringConstantsClassPatcher] - 替换 static final String 字段常量
+ */
 class Patcher(
     private val deobfuscator: Deobfuscator,
     private val stringRegistry: StringRegistry,
@@ -39,6 +49,8 @@ class Patcher(
     private val classRegistry: ClassRegistry,
     private val fileRegistry: FileRegistry,
     private val asmApi: Int,
+    private val stringProcessor: StringProcessor,
+    private val mode: ObfuscationMode
 ) {
 
     private val logger = getLogger()
@@ -108,15 +120,13 @@ class Patcher(
                 .wrapIf(hasObfuscateAnnotation) { RemoveObfuscateClassPatcher(asmApi, it) }
                 .wrapIf(configuration != null) {
                     StringLiteralsClassPatcher(
-                        deobfuscator,
-                        stringRegistry,
-                        asmApi,
-                        it
+                        deobfuscator, stringRegistry, stringProcessor, mode, asmApi, it
                     )
                 }
                 .wrapIf(configuration != null && shouldObfuscateLiterals) {
                     StringConstantsClassPatcher(
-                        configuration!!,
+                        configuration!!, stringRegistry, stringProcessor, mode,
+                        deobfuscator.type,
                         asmApi,
                         it
                     )

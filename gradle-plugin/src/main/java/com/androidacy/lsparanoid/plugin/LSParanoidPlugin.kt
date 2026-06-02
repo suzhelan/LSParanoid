@@ -28,12 +28,40 @@ import org.gradle.api.tasks.compile.JavaCompile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.security.SecureRandom
 
+/**
+ * LSParanoid Gradle 插件。
+ *
+ * 该插件在 Android 构建过程中自动集成字符串混淆功能。
+ * 支持自定义加解密处理器、密钥配置、多种 DEX 显示格式。
+ *
+ * ## 插件 ID
+ *
+ * `com.androidacy.lsparanoid`
+ *
+ * ## 基本使用
+ *
+ * ```kotlin
+ * plugins {
+ *     id("com.androidacy.lsparanoid")
+ * }
+ *
+ * lsparanoid {
+ *     // 基本配置
+ *     variantFilter = { it.buildType == "release" }
+ *
+ *     // 自定义处理器配置
+ *     processor = "com.example.MyStringProcessor"
+ *     key = "my-secret-key"
+ *     mode = "base64"
+ * }
+ * ```
+ */
 class LSParanoidPlugin : Plugin<Project> {
     @Suppress("UnstableApiUsage")
     override fun apply(project: Project) {
         val extension = project.extensions.create("lsparanoid", LSParanoidExtension::class.java)
 
-        // Add dependencies early
+        // 添加核心库依赖
         project.addDependencies()
 
         project.plugins.withType(AndroidBasePlugin::class.java) { _ ->
@@ -45,11 +73,17 @@ class LSParanoidPlugin : Plugin<Project> {
                     "lsparanoid${variant.name.replaceFirstChar { it.uppercase() }}",
                     LSParanoidTask::class.java
                 ) {
+                    // 基本配置
                     it.bootClasspath.set(components.sdkComponents.bootClasspath)
                     it.classpath = variant.compileClasspath
                     it.seed.set(extension.seed ?: SecureRandom().nextInt())
                     it.classFilter = extension.classFilter
                     it.projectName.set("${project.rootProject.name}\$${project.path}")
+
+                    // 自定义处理器配置
+                    it.processorClassName.set(extension.processor)
+                    it.key.set(extension.key)
+                    it.mode.set(extension.mode)
                 }
 
                 variant.artifacts.forScope(if (extension.includeDependencies) Scope.ALL else Scope.PROJECT)
@@ -60,9 +94,8 @@ class LSParanoidPlugin : Plugin<Project> {
                         LSParanoidTask::output,
                     )
 
-                // Connect to compile tasks directly without afterEvaluate
+                // 连接编译任务
                 task.configure { taskObj ->
-                    // Use Android's task providers instead of filtering by name
                     val javaCompileTask = variant.sources.java?.let {
                         project.tasks.named("compile${variant.name.replaceFirstChar { c -> c.uppercase() }}JavaWithJavac")
                     }
@@ -70,8 +103,6 @@ class LSParanoidPlugin : Plugin<Project> {
                         taskObj.dependsOn(javaCompileTask)
                     }
 
-                    // For Kotlin, depend only on the main source compilation task (not test tasks)
-                    // The task name follows pattern: compile<VariantName>Kotlin
                     val variantCapitalized = variant.name.replaceFirstChar { c -> c.uppercase() }
                     val kotlinTaskName = "compile${variantCapitalized}Kotlin"
                     project.tasks.matching { it is KotlinCompilationTask<*> && it.name == kotlinTaskName }
@@ -83,7 +114,7 @@ class LSParanoidPlugin : Plugin<Project> {
             }
         }
 
-        // Configure Java and Kotlin compiler options
+        // 配置 Java 和 Kotlin 编译器选项（优化字符串拼接以便更好的混淆）
         project.tasks.withType(JavaCompile::class.java) {
             it.options.compilerArgs.add("-XDstringConcat=inline")
         }
@@ -95,6 +126,10 @@ class LSParanoidPlugin : Plugin<Project> {
         }
     }
 
+    /**
+     * 添加核心库依赖。
+     * 自动将 core 模块添加到项目的 implementation 配置中。
+     */
     private fun Project.addDependencies() {
         val version = Build.VERSION
         val configurationName = JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME
