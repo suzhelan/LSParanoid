@@ -35,6 +35,22 @@ package com.androidacy.lsparanoid
  * - 加密后的 `ByteArray` 必须能被同实现的 `decrypt` 方法正确还原
  * - 类必须在编译类路径和运行时类路径上都可用
  *
+ * ## 重要：防止无限递归
+ *
+ * 如果你的 StringProcessor 类位于 `classFilter` 的范围内，框架会**自动排除**它，
+ * 不对其字符串进行混淆。这是为了避免运行时的无限递归：
+ *
+ * ```
+ * Deobfuscator.getString() → decryptFormatted() → PROCESSOR.parseData()
+ *   → parseData() 内部的字符串被混淆，需要 Deobfuscator 解密
+ *     → Deobfuscator.decryptFormatted() → PROCESSOR.parseData() → 无限递归 → StackOverflow!
+ * ```
+ *
+ * **建议：** 将 StringProcessor 放在独立的库模块（library module）中，
+ * 不在 `classFilter` 范围内，这样就不会触发此限制。
+ * 处理器内部的字符串（分隔符、默认密钥等）是格式标记而非敏感数据，
+ * 不混淆不会影响应用整体的安全性。
+ *
  * ## 密钥管理
  *
  * - 如果在 Gradle 中配置了 `key`，它会作为参数传入 `encrypt`/`decrypt`

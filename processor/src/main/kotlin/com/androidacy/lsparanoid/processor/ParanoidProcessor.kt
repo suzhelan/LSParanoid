@@ -83,11 +83,21 @@ class ParanoidProcessor(
 
         dumpConfiguration(stringProcessor)
 
+        // 编译期警告：如果 StringProcessor 在 classFilter 范围内，会被自动排除
+        if (processorClassName != null && classFilter?.invoke(processorClassName) == true) {
+            logger.warn(
+                "StringProcessor '{}' is within classFilter scope and will be auto-excluded " +
+                "from obfuscation to prevent infinite recursion at runtime. " +
+                "Consider placing your StringProcessor in a separate library module.",
+                processorClassName
+            )
+        }
+
         // 2. 创建字符串注册表（传入 mode 决定格式化方式）
         StringRegistryImpl(stringProcessor, keyBytes, obfuscationMode).use { stringRegistry ->
 
-            // 3. 分析输入类
-            val analysisResult = Analyzer(grip, classFilter).analyze(sortedInputs)
+            // 3. 分析输入类（传递 processorClassName 以排除 StringProcessor 类）
+            val analysisResult = Analyzer(grip, classFilter, processorClassName).analyze(sortedInputs)
             analysisResult.dump()
 
             // 4. 创建 Deobfuscator 模型

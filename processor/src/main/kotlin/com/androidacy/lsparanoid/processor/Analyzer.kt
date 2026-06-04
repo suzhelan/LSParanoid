@@ -29,7 +29,12 @@ import com.joom.grip.mirrors.Type
 import com.joom.grip.withFieldInitializer
 import java.nio.file.Path
 
-class Analyzer(private val grip: Grip, private val classFilter: ((className: String) -> Boolean)?) {
+class Analyzer(
+    private val grip: Grip,
+    private val classFilter: ((className: String) -> Boolean)?,
+    /** 自定义 StringProcessor 全类名，用于排除以防止无限递归。null 表示使用默认处理器。 */
+    private val processorClassName: String? = null
+) {
   fun analyze(inputs: List<Path>): AnalysisResult {
     val typesToObfuscate = findTypesToObfuscate(inputs)
     val obfuscationConfigurationsByType = typesToObfuscate.associateBy(
@@ -41,7 +46,7 @@ class Analyzer(private val grip: Grip, private val classFilter: ((className: Str
 
   private fun findTypesToObfuscate(inputs: List<Path>): Set<Type.Object> {
     val registry = newObfuscatedTypeRegistry(grip.classRegistry).withCache()
-    val query = grip select classes from inputs where registry.shouldObfuscate(classFilter)
+    val query = grip select classes from inputs where registry.shouldObfuscate(classFilter, processorClassName)
     return query.execute().types.toSortedSet(compareBy { it.internalName })
   }
 
