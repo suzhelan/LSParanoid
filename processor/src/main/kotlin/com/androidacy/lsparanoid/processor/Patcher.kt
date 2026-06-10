@@ -27,7 +27,7 @@ import com.androidacy.lsparanoid.processor.commons.createDirectory
 import com.androidacy.lsparanoid.processor.commons.createFile
 import com.androidacy.lsparanoid.processor.logging.getLogger
 import com.androidacy.lsparanoid.processor.model.Deobfuscator
-import com.androidacy.lsparanoid.StringProcessor
+import com.androidacy.lsparanoid.StringEncryptor
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.ClassWriter
@@ -49,7 +49,7 @@ class Patcher(
     private val classRegistry: ClassRegistry,
     private val fileRegistry: FileRegistry,
     private val asmApi: Int,
-    private val stringProcessor: StringProcessor,
+    private val stringEncryptor: StringEncryptor,
     private val mode: ObfuscationMode
 ) {
 
@@ -120,12 +120,12 @@ class Patcher(
                 .wrapIf(hasObfuscateAnnotation) { RemoveObfuscateClassPatcher(asmApi, it) }
                 .wrapIf(configuration != null) {
                     StringLiteralsClassPatcher(
-                        deobfuscator, stringRegistry, stringProcessor, mode, asmApi, it
+                        deobfuscator, stringRegistry, stringEncryptor, mode, asmApi, it
                     )
                 }
                 .wrapIf(configuration != null && shouldObfuscateLiterals) {
                     StringConstantsClassPatcher(
-                        configuration!!, stringRegistry, stringProcessor, mode,
+                        configuration!!, stringRegistry, stringEncryptor, mode,
                         deobfuscator.type,
                         asmApi,
                         it

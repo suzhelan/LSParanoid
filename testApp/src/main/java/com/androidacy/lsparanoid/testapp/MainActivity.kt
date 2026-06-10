@@ -23,7 +23,7 @@ class MainActivity : Activity() {
         KtSimpleClass().test()
         val rootLayout: ViewGroup = FrameLayout(this)
         val textView = TextView(this)
-        textView.setText("This is a test")
+        textView.setText("This is a test ")
         rootLayout.addView(textView)
         setContentView(rootLayout)
         try {

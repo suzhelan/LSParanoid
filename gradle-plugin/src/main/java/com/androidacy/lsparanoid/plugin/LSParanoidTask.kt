@@ -33,8 +33,8 @@ import java.util.jar.JarOutputStream
  * LSParanoid 字符串混淆 Gradle Task。
  *
  * 该 Task 在 Java/Kotlin 编译完成后执行，扫描目标类中的字符串常量，
- * 使用配置的 [com.androidacy.lsparanoid.StringProcessor] 进行加密，
- * 并生成运行时解密所需的 Deobfuscator 类。
+ * 使用配置的 [com.androidacy.lsparanoid.StringEncryptor] 进行编译时加密，
+ * 并生成运行时解密所需的 Deobfuscator 类（通过 [com.androidacy.lsparanoid.StringDecryptor] 接口）。
  *
  * 支持通过 Gradle 配置自定义加解密处理器、密钥、DEX 显示格式等。
  */

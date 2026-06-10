@@ -18,7 +18,7 @@
 package com.androidacy.lsparanoid.processor
 
 import com.androidacy.lsparanoid.ObfuscationMode
-import com.androidacy.lsparanoid.StringProcessor
+import com.androidacy.lsparanoid.StringEncryptor
 import com.joom.grip.mirrors.toAsmType
 import com.androidacy.lsparanoid.processor.logging.getLogger
 import org.objectweb.asm.ClassVisitor
@@ -35,7 +35,7 @@ import org.objectweb.asm.commons.Method
 class StringConstantsClassPatcher(
     private val configuration: ClassConfiguration,
     private val stringRegistry: StringRegistry,
-    private val stringProcessor: StringProcessor,
+    private val stringEncryptor: StringEncryptor,
     private val mode: ObfuscationMode,
     private val deobfuscatorType: com.joom.grip.mirrors.Type.Object,
     asmApi: Int,
@@ -77,7 +77,7 @@ class StringConstantsClassPatcher(
                 logger.info("{}: patching <clinit>", configuration.container.internalName)
                 super.visitCode()
                 for ((field, value) in configuration.constantStringsByFieldName) {
-                    if (!stringProcessor.shouldFog(value)) {
+                    if (!stringEncryptor.shouldFog(value)) {
                         push(value)
                         putStatic(configuration.container.toAsmType(), field, STRING_TYPE)
                         continue

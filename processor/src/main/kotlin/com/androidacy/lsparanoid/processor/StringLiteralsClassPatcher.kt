@@ -18,7 +18,7 @@
 package com.androidacy.lsparanoid.processor
 
 import com.androidacy.lsparanoid.ObfuscationMode
-import com.androidacy.lsparanoid.StringProcessor
+import com.androidacy.lsparanoid.StringEncryptor
 import com.joom.grip.mirrors.toAsmType
 import com.androidacy.lsparanoid.processor.logging.getLogger
 import com.androidacy.lsparanoid.processor.model.Deobfuscator
@@ -35,7 +35,7 @@ import org.objectweb.asm.commons.Method
 class StringLiteralsClassPatcher(
     private val deobfuscator: Deobfuscator,
     private val stringRegistry: StringRegistry,
-    private val stringProcessor: StringProcessor,
+    private val stringEncryptor: StringEncryptor,
     private val mode: ObfuscationMode,
     asmApi: Int,
     delegate: ClassVisitor,
@@ -57,7 +57,7 @@ class StringLiteralsClassPatcher(
 
         return object : GeneratorAdapter(api, mv, a, n, d) {
             override fun visitLdcInsn(c: Any) {
-                if (c is String && stringProcessor.shouldFog(c)) {
+                if (c is String && stringEncryptor.shouldFog(c)) {
                     logger.info("{}.{}{}: \"{}\"", className, n, d, c)
                     val entry = stringRegistry.registerString(c)
                     when (entry) {

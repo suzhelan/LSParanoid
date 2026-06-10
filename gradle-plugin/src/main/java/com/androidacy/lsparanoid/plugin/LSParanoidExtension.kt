@@ -96,6 +96,11 @@ open class LSParanoidExtension {
      * - 未设置（null）：使用内置的 [com.androidacy.lsparanoid.DefaultStringProcessor]
      * - 设置后：处理器类必须在编译类路径和运行时类路径上都可用
      *
+     * **接口分离说明：** [StringProcessor][com.androidacy.lsparanoid.StringProcessor]
+     * 继承自 [StringEncryptor][com.androidacy.lsparanoid.StringEncryptor]（编译时）和
+     * [StringDecryptor][com.androidacy.lsparanoid.StringDecryptor]（运行时）。
+     * 最终 APK 中 `encrypt`/`shouldFog`/`formatData` 等编译时方法可被 R8/ProGuard 安全移除。
+     *
      * 推荐将处理器放在独立的库模块中，然后在 app 模块中添加依赖。
      */
     var processor: String? = null
@@ -104,8 +109,8 @@ open class LSParanoidExtension {
      * 加密密钥。
      *
      * - 未设置（null）：不向处理器传递密钥（处理器自行管理密钥）
-     * - 设置后：密钥会通过参数传给 [com.androidacy.lsparanoid.StringProcessor.encrypt] 和
-     *   [com.androidacy.lsparanoid.StringProcessor.decrypt] 方法
+     * - 设置后：密钥会通过参数传给 [com.androidacy.lsparanoid.StringEncryptor.encrypt] 和
+     *   [com.androidacy.lsparanoid.StringDecryptor.decrypt] 方法
      *
      * **安全说明：** 密钥在写入 DEX 时会进行混淆处理，不会以明文字符串形式出现。
      * 但此混淆不是密码学安全的，仅增加逆向工程难度。

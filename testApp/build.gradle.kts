@@ -1,6 +1,6 @@
 plugins {
     id("com.android.application") version "9.0.0"
-    id("com.androidacy.lsparanoid") version "0.11.0"
+    id("com.androidacy.lsparanoid")
 }
 
 lsparanoid {
@@ -43,17 +43,11 @@ android {
         release {
             // Enable minification for release to test ProGuard rules
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-    }
-    // 声明原生编译位置，准确到CMakeLists的位置
-    externalNativeBuild {
-        cmake {
-            path("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
         }
     }
 
@@ -76,7 +70,6 @@ android {
 }
 
 dependencies {
-    implementation("com.androidacy.lsparanoid:core:0.11.0")
 
     // Kotlin stdlib needed for annotations used by lsparanoid
     compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")

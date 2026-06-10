@@ -34,6 +34,16 @@ import java.security.SecureRandom
  * 该插件在 Android 构建过程中自动集成字符串混淆功能。
  * 支持自定义加解密处理器、密钥配置、多种 DEX 显示格式。
  *
+ * ## 接口分离架构
+ *
+ * 框架将加解密接口分离为编译时和运行时两部分：
+ * - [StringEncryptor][com.androidacy.lsparanoid.StringEncryptor]：编译时加密接口
+ * - [StringDecryptor][com.androidacy.lsparanoid.StringDecryptor]：运行时解密接口
+ * - [StringProcessor][com.androidacy.lsparanoid.StringProcessor]：组合接口（向后兼容）
+ *
+ * 最终 APK 中 `encrypt`/`shouldFog`/`formatData` 等编译时方法可被 R8/ProGuard 安全移除，
+ * 减少逆向工程的攻击面。
+ *
  * ## 插件 ID
  *
  * `com.androidacy.lsparanoid`

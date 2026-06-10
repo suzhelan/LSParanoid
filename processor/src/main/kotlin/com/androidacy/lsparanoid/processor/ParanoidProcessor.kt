@@ -27,6 +27,7 @@ import com.androidacy.lsparanoid.processor.logging.getLogger
 import com.androidacy.lsparanoid.processor.model.Deobfuscator
 import com.androidacy.lsparanoid.DefaultStringProcessor
 import com.androidacy.lsparanoid.StringProcessor
+import com.androidacy.lsparanoid.StringEncryptor
 import com.androidacy.lsparanoid.ObfuscationMode
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.Type
@@ -39,9 +40,13 @@ import java.util.jar.JarOutputStream
  *
  * 协调整个字符串混淆流程：
  * 1. 分析输入类文件，找到需要混淆的字符串
- * 2. 使用配置的 [StringProcessor] 进行加密
+ * 2. 使用配置的 [StringEncryptor] 进行加密
  * 3. 替换原始字符串为解密方法调用
- * 4. 生成 Deobfuscator 运行时解密类
+ * 4. 生成 Deobfuscator 运行时解密类（通过 [StringDecryptor] 接口调用解密）
+ *
+ * 加载的 [StringProcessor] 实现同时满足编译时 ([StringEncryptor]) 和
+ * 运行时 ([StringDecryptor]) 接口要求。编译时组件只接收 [StringEncryptor] 视图，
+ * 生成的 Deobfuscator 只引用 [StringDecryptor] 接口。
  *
  * @param seed 种子值
  * @param classpath 类路径（用于类分析和自定义处理器加载）
@@ -78,6 +83,7 @@ class ParanoidProcessor(
         // 1. 解析配置
         val obfuscationMode = ObfuscationMode.fromString(mode)
         val stringProcessor = loadStringProcessor()
+        val stringEncryptor: StringEncryptor = stringProcessor  // 编译时只需要加密接口
         val keyBytes = key?.toByteArray(Charsets.UTF_8)
         val obfuscatedKey = keyBytes?.let { DeobfuscatorGenerator.obfuscateKey(it, seed) }
 
@@ -94,7 +100,7 @@ class ParanoidProcessor(
         }
 
         // 2. 创建字符串注册表（传入 mode 决定格式化方式）
-        StringRegistryImpl(stringProcessor, keyBytes, obfuscationMode).use { stringRegistry ->
+        StringRegistryImpl(stringEncryptor, keyBytes, obfuscationMode).use { stringRegistry ->
 
             // 3. 分析输入类（传递 processorClassName 以排除 StringProcessor 类）
             val analysisResult = Analyzer(grip, classFilter, processorClassName).analyze(sortedInputs)
@@ -122,7 +128,7 @@ class ParanoidProcessor(
                     grip.classRegistry,
                     grip.fileRegistry,
                     asmApi,
-                    stringProcessor,
+                    stringEncryptor,
                     obfuscationMode
                 ).copyAndPatchClasses(sources, output)
 

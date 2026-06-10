@@ -37,6 +37,10 @@ import org.objectweb.asm.commons.Method
  * - BASE64: String[] 数据 + decryptFromBase64(String) 方法
  * - HEX: String[] 数据 + decryptFromHex(String) 方法
  * - CUSTOM: String[] 数据 + decryptFormatted(String) → PROCESSOR.parseData() 方法
+ *
+ * 生成的 Deobfuscator 类中 PROCESSOR 字段类型为 [StringDecryptor][com.androidacy.lsparanoid.StringDecryptor]，
+ * 仅引用运行时解密接口，不引用编译时加密接口 [StringEncryptor][com.androidacy.lsparanoid.StringEncryptor]。
+ * 这使得 R8/ProGuard 可以安全地从最终 APK 中移除 `encrypt`、`shouldFog`、`formatData` 等编译时方法。
  */
 class DeobfuscatorGenerator(
     private val deobfuscator: Deobfuscator,
@@ -76,7 +80,7 @@ class DeobfuscatorGenerator(
     private fun ClassVisitor.generateFields() {
         // PROCESSOR
         visitField(ACC_PRIVATE or ACC_STATIC or ACC_FINAL,
-            "PROCESSOR", STRING_PROCESSOR_TYPE.descriptor, null, null).visitEnd()
+            "PROCESSOR", STRING_DECRYPTOR_TYPE.descriptor, null, null).visitEnd()
 
         // 密钥字段
         if (obfuscatedKey != null) {
@@ -109,7 +113,7 @@ class DeobfuscatorGenerator(
             // PROCESSOR = new Processor()
             val procType = Type.getObjectType(processorClassName)
             newInstance(procType); dup(); invokeConstructor(procType, METHOD_INIT)
-            putStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_PROCESSOR_TYPE)
+            putStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_DECRYPTOR_TYPE)
 
             // _KEY_DATA
             if (obfuscatedKey != null) {
@@ -204,44 +208,44 @@ class DeobfuscatorGenerator(
 
     private fun ClassVisitor.generateDecryptBytes() {
         newMethod(ACC_PUBLIC or ACC_STATIC, Method("decrypt", STRING_TYPE, arrayOf(BYTE_ARRAY_TYPE))) {
-            getStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_PROCESSOR_TYPE)
+            getStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_DECRYPTOR_TYPE)
             loadArg(0)
             callGetKey()
-            invokeInterface(STRING_PROCESSOR_TYPE, METHOD_DECRYPT)
+            invokeInterface(STRING_DECRYPTOR_TYPE, METHOD_DECRYPT)
             checkCast(STRING_TYPE)
         }
     }
 
     private fun ClassVisitor.generateDecryptBase64() {
         newMethod(ACC_PUBLIC or ACC_STATIC, Method("decryptFromBase64", STRING_TYPE, arrayOf(STRING_TYPE))) {
-            getStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_PROCESSOR_TYPE)
+            getStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_DECRYPTOR_TYPE)
             loadArg(0)
             invokeStatic(BASE64_DECODER_TYPE, Method("decode", "(Ljava/lang/String;)[B"))
             callGetKey()
-            invokeInterface(STRING_PROCESSOR_TYPE, METHOD_DECRYPT)
+            invokeInterface(STRING_DECRYPTOR_TYPE, METHOD_DECRYPT)
             checkCast(STRING_TYPE)
         }
     }
 
     private fun ClassVisitor.generateDecryptHex() {
         newMethod(ACC_PUBLIC or ACC_STATIC, Method("decryptFromHex", STRING_TYPE, arrayOf(STRING_TYPE))) {
-            getStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_PROCESSOR_TYPE)
+            getStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_DECRYPTOR_TYPE)
             loadArg(0)
             invokeStatic(HEX_HELPER_TYPE, Method("decode", "(Ljava/lang/String;)[B"))
             callGetKey()
-            invokeInterface(STRING_PROCESSOR_TYPE, METHOD_DECRYPT)
+            invokeInterface(STRING_DECRYPTOR_TYPE, METHOD_DECRYPT)
             checkCast(STRING_TYPE)
         }
     }
 
     private fun ClassVisitor.generateDecryptFormatted() {
         newMethod(ACC_PUBLIC or ACC_STATIC, Method("decryptFormatted", STRING_TYPE, arrayOf(STRING_TYPE))) {
-            getStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_PROCESSOR_TYPE)
-            getStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_PROCESSOR_TYPE)
+            getStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_DECRYPTOR_TYPE)
+            getStatic(deobfuscator.type.toAsmType(), "PROCESSOR", STRING_DECRYPTOR_TYPE)
             loadArg(0)
-            invokeInterface(STRING_PROCESSOR_TYPE, Method("parseData", "(Ljava/lang/String;)[B"))
+            invokeInterface(STRING_DECRYPTOR_TYPE, Method("parseData", "(Ljava/lang/String;)[B"))
             callGetKey()
-            invokeInterface(STRING_PROCESSOR_TYPE, METHOD_DECRYPT)
+            invokeInterface(STRING_DECRYPTOR_TYPE, METHOD_DECRYPT)
             checkCast(STRING_TYPE)
         }
     }
@@ -295,7 +299,7 @@ class DeobfuscatorGenerator(
         private val STRING_ARRAY_TYPE = Type.getType(Array<String>::class.java)
         private val BYTE_ARRAY_TYPE = Type.getType(ByteArray::class.java)
         private val BYTE_ARRAY_ARRAY_TYPE = Type.getType(Array<ByteArray>::class.java)
-        private val STRING_PROCESSOR_TYPE = Type.getObjectType("com/androidacy/lsparanoid/StringProcessor")
+        private val STRING_DECRYPTOR_TYPE = Type.getObjectType("com/androidacy/lsparanoid/StringDecryptor")
         private val BASE64_DECODER_TYPE = Type.getObjectType("com/androidacy/lsparanoid/Base64Decoder")
         private val HEX_HELPER_TYPE = Type.getObjectType("com/androidacy/lsparanoid/HexHelper")
 

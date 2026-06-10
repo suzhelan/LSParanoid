@@ -16,4 +16,7 @@ dependencyResolutionManagement {
     }
 }
 
+
 rootProject.name = "testApp"
+
+includeBuild("..")

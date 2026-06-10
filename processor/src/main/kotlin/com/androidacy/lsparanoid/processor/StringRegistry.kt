@@ -19,7 +19,7 @@ package com.androidacy.lsparanoid.processor
 
 import com.androidacy.lsparanoid.HexHelper
 import com.androidacy.lsparanoid.ObfuscationMode
-import com.androidacy.lsparanoid.StringProcessor
+import com.androidacy.lsparanoid.StringEncryptor
 import java.io.Closeable
 
 /**
@@ -72,7 +72,7 @@ interface StringRegistry : Closeable {
  * 默认实现。根据 mode 决定如何编码加密数据 + 选择存储策略。
  */
 class StringRegistryImpl @JvmOverloads constructor(
-    private val stringProcessor: StringProcessor,
+    private val stringProcessor: StringEncryptor,
     private val key: ByteArray?,
     private val mode: ObfuscationMode = ObfuscationMode.BYTES,
     private val inlineThreshold: Int = DEFAULT_INLINE_THRESHOLD

@@ -19,7 +19,7 @@ package com.androidacy.lsparanoid
 /**
  * 混淆数据在 DEX 文件中的存储/显示格式。
  *
- * 所有的模式都围绕用户 [StringProcessor.encrypt] 返回的 `ByteArray` 进行格式化。
+ * 所有的模式都围绕用户 [StringEncryptor.encrypt] 返回的 `ByteArray` 进行格式化。
  * 不同的模式决定了加密后的字节数组以什么形式出现在反编译后的 DEX 代码中。
  *
  * ## 使用示例
@@ -73,8 +73,8 @@ enum class ObfuscationMode {
     /**
      * 自定义格式化模式。
      *
-     * 加密后的 byte[] 由用户定义的 [StringProcessor.formatData] 格式化为字符串，
-     * 运行时由 [StringProcessor.parseData] 解析回 byte[]。
+     * 加密后的 byte[] 由用户定义的 [StringEncryptor.formatData] 格式化为字符串，
+     * 运行时由 [StringDecryptor.parseData] 解析回 byte[]。
      *
      * **DEX 中的外观示例:** 由用户决定（如 "喵呜喵呜~"）
      *
